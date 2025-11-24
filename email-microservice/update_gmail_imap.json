@@ -1,0 +1,23 @@
+{
+  "provider_name": "Gmail",
+  "tenant_id": "0198a358-c003-71d5-af01-b6362d3fd97a",
+  "config_json": {
+    "driver": "smtp",
+    "host": "smtp.gmail.com",
+    "port": 587,
+    "encryption": "tls",
+    "username": "nishantjoshiestaticinfotech@gmail.com",
+    "password": "lqvv wifn mfcl kxey",
+    "from_address": "nishantjoshiestaticinfotech@gmail.com",
+    "from_name": "Nishant Gmail's",
+    "protocol": "imap",
+    "imap_host": "imap.gmail.com",
+    "imap_port": 993,
+    "imap_encryption": "ssl",
+    "imap_username": "nishantjoshiestaticinfotech@gmail.com",
+    "imap_password": "lqvv wifn mfcl kxey",
+    "folder": "INBOX"
+  },
+  "bounce_email": null,
+  "header_overrides": []
+}

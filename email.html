@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Email Microservice Architecture Diagram</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .box {
+      border: 2px solid #6c757d;
+      padding: 15px;
+      margin: 10px;
+      border-radius: 8px;
+      background-color: #f8f9fa;
+      text-align: center;
+    }
+    .arrow {
+      font-size: 24px;
+      text-align: center;
+    }
+    .sub-box {
+      border: 1px dashed #aaa;
+      margin: 5px 0;
+      padding: 5px;
+      font-size: 14px;
+      background-color: #fff;
+    }
+  </style>
+</head>
+<body>
+<div class="container mt-5">
+  <h2 class="text-center">Email Microservice Architecture Diagram</h2>
+
+  <!-- Clients -->
+  <div class="row mt-4">
+    <div class="col box">
+      <strong>Client App</strong><br>
+      - Sends Email JSON via RabbitMQ<br>
+      - UI to Compose/View Emails
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="row arrow">
+    <div class="col">↓</div>
+  </div>
+
+  <!-- RabbitMQ -->
+  <div class="row">
+    <div class="col box">
+      <strong>RabbitMQ Queue</strong><br>
+      - Receives email payload from Client<br>
+      - Format: JSON, HTML, Text, EML<br>
+      - With/Without Attachments<br>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="row arrow">
+    <div class="col">↓</div>
+  </div>
+
+  <!-- Email Microservice -->
+  <div class="row">
+    <div class="col box">
+      <strong>Email Microservice (Laravel + PHP)</strong><br>
+      <div class="sub-box">Queue Listener</div>
+      <div class="sub-box">SMTP Sender (SendGrid, SES, Custom SMTP)</div>
+      <div class="sub-box">IMAP/POP3 Poller (for A, B, C)</div>
+      <div class="sub-box">Email Parser (MIME, EML)</div>
+      <div class="sub-box">Encoding Handler (Base64, quoted-printable)</div>
+      <div class="sub-box">Attachment Extractor</div>
+      <div class="sub-box">Inline CID Resolver</div>
+      <div class="sub-box">Error Handler + Retry Logic</div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="row arrow">
+    <div class="col">↓</div>
+  </div>
+
+  <!-- Local DB + Storage -->
+  <div class="row">
+    <div class="col-md-6 box">
+      <strong>Local Database</strong><br>
+      - Email metadata (to, from, subject, etc.)<br>
+      - User folders (inbox, sent, spam)<br>
+      - Indexed for fast search
+    </div>
+    <div class="col-md-6 box">
+      <strong>File/Blob Storage</strong><br>
+      - Raw EML / MIME files<br>
+      - Attachments<br>
+      - Embedded Images
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div class="row arrow">
+    <div class="col">↑</div>
+  </div>
+
+  <!-- Users -->
+  <div class="row">
+    <div class="col box">
+      <strong>User A</strong><br>Pulls from IMAP<br>View Inbox / Send
+    </div>
+    <div class="col box">
+      <strong>User B</strong><br>Pulls from IMAP<br>View Inbox / Send
+    </div>
+    <div class="col box">
+      <strong>User C</strong><br>Pulls from IMAP<br>View Inbox / Send
+    </div>
+  </div>
+
+  <div class="mt-5 text-center">
+    <p><strong>Summary:</strong> The client places a request on RabbitMQ. Email Microservice consumes it, sends email via SMTP, and polls user inboxes via IMAP/POP3 to update local DB. All MIME formats and encodings are supported, with Laravel PHP stack powering the microservice logic.</p>
+  </div>
+</div>
+</body>
+</html>

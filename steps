@@ -1,0 +1,19 @@
+If you know the orignal project scope which were mentioned in the document. We were supposed to implement email payload from RabbitMQ queue.
+You have made some Rest API"s for that. Instead of using REST API's to get Email payload we need to pull payload from RabbitMQ queue.
+You can keep existing Rest API's for that. But we need to pull payload from RabbitMQ queue. Once we get payload from RabbitMQ queue we need to process 
+it and send email.
+
+Remember every sent mail will logged in the outbox table and we need to pull payload from RabbitMQ queue and process it and send email. 
+Here i am attaching paload parameters for the email from RabbitMQ queue.
+
+{
+    "tenant_id": "01996243-2d8c-726d-a5c2-81b7005ce9a2",
+    "provider_id": "01996243-2da2-72b2-80c2-9d3f855e404a",
+    "from": "noreply@yourcms.com",
+    "to": ["customer@example.com"],
+    "subject": "Welcome Email",
+    "body_format": "HTML",
+    "body_content": "<h1>Welcome!</h1><p>Thank you for signing up.</p>"
+}
+
+Here Provider id means Active SMTP Provider in the database under the tenant. For now you can use default Active SMTP Provider to test the email sending functionality.

@@ -1,0 +1,135 @@
+here’s a tight, production-ready header policy plus send examples that keep your network/server details out of the recipient’s view.
+Header policy (what to show vs hide)
+Include (good for deliverability & UX)
+•	From: support@broker.com (aligned with your sending domain)
+•	To: masked via provider, but the actual recipient will still see their own address (inevitable)
+•	Subject:
+•	Date:
+•	Message-ID: use your sending subdomain, e.g. <{uuid}@mailer.broker.com>
+•	MIME-Version: 1.0
+•	Content-Type: text/plain; charset=UTF-8 or multipart/alternative
+•	List-Unsubscribe: <mailto:unsubscribe@mailer.broker.com>, <https://broker.com/email/unsub?u={hash}>
+•	List-Unsubscribe-Post: List-Unsubscribe=One-Click (if you support one-click)
+•	Reply-To: support@broker.com (optional; omit if not needed)
+•	X-Entity-Ref-ID: a random UUID you generate (helps correlate in logs; safe)
+Set via SMTP envelope (not header)
+•	Return-Path / MAIL FROM (bounce address): bounce@mailer.broker.com
+o	This is what DMARC/ARC chains will surface; it’s fine—it’s the masking subdomain.
+Omit / Strip (hide your stack)
+•	X-Mailer, X-PHP-Script, X-Generated-By, any X-Altima* internal debug headers
+•	Internal Received: hops (your proxy must be the first SMTP-speaking host; don’t let the web app talk SMTP directly)
+•	Any headers containing internal IPs/hostnames or Git/SHA build IDs
+DNS / policy musts
+•	SPF for mailer.broker.com → include your provider (e.g., SES)
+•	DKIM: enable at provider; key lives on mailer._domainkey.mailer.broker.com
+•	DMARC on organizational domain; alignment relaxed (pct=100; aspf=r; adkim=r) to start
+•	Use Custom MAIL FROM (SES) so Return-Path also aligns to your subdomain
+________________________________________
+Send example — AWS SES (PHP, Raw Email API)
+This uses the AWS SDK to send a fully formed message via SendRawEmail, so you control headers precisely.
+<?php
+require 'vendor/autoload.php';
+
+use Aws\Ses\SesClient;
+use Aws\Exception\AwsException;
+
+$ses = new SesClient([
+  'version' => '2010-12-01',
+  'region'  => 'eu-west-1',                // your SES region
+  'credentials' => [
+    'key'    => getenv('AWS_ACCESS_KEY_ID'),
+    'secret' => getenv('AWS_SECRET_ACCESS_KEY'),
+  ]
+]);
+
+$from        = 'support@broker.com';       // verified in SES
+$bounceFrom  = 'bounce@mailer.broker.com'; // custom MAIL FROM domain in SES
+$to          = 'masked@recipient.tld';     // SES will deliver to real rcpt on SMTP; you can map acct->email in your proxy
+$messageId   = sprintf('<%s@mailer.broker.com>', bin2hex(random_bytes(16)));
+$boundary    = 'b-' . bin2hex(random_bytes(8));
+
+$subject = 'Your account update';
+$text    = "Hello,\n\nYour withdrawal has been processed.\n\nThanks,\nAltimaCRM Support";
+$html    = "<html><body><p>Hello,</p><p>Your withdrawal has been processed.</p><p>Thanks,<br/>AltimaCRM Support</p></body></html>";
+
+$raw = "";
+$raw .= "From: Altima Support <{$from}>\r\n";
+$raw .= "To: <{$to}>\r\n";
+$raw .= "Subject: {$subject}\r\n";
+$raw .= "Date: " . date('r') . "\r\n";
+$raw .= "Message-ID: {$messageId}\r\n";
+$raw .= "Reply-To: Altima Support <{$from}>\r\n";
+$raw .= "List-Unsubscribe: <mailto:unsubscribe@mailer.broker.com>, <https://broker.com/email/unsub?u=__HASH__>\r\n";
+$raw .= "List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n";
+$raw .= "MIME-Version: 1.0\r\n";
+$raw .= "Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n";
+$raw .= "\r\n";
+$raw .= "--{$boundary}\r\n";
+$raw .= "Content-Type: text/plain; charset=UTF-8\r\n\r\n";
+$raw .= "{$text}\r\n";
+$raw .= "--{$boundary}\r\n";
+$raw .= "Content-Type: text/html; charset=UTF-8\r\n\r\n";
+$raw .= "{$html}\r\n";
+$raw .= "--{$boundary}--\r\n";
+
+// IMPORTANT: envelope sender (MAIL FROM / Return-Path) set via SourceArn or ConfigurationSet w/ custom MAIL FROM
+try {
+  $result = $ses->sendRawEmail([
+    'RawMessage' => ['Data' => $raw],
+    'Source'     => $from,                // visible From
+    // Optional: if using a dedicated identity or config set, include these:
+    // 'ConfigurationSetName' => 'altima-prod',
+    // 'FromArn' => 'arn:aws:ses:eu-west-1:123456789012:identity/broker.com',
+    // 'ReturnPathArn' => 'arn:aws:ses:eu-west-1:123456789012:identity/mailer.broker.com',
+  ]);
+  // Log $result['MessageId']
+} catch (AwsException $e) {
+  // Handle error: $e->getAwsErrorMessage()
+}
+Notes
+•	Make sure the SES identity for broker.com is verified and Custom MAIL FROM is set to mailer.broker.com (or similar).
+•	Once Custom MAIL FROM is enabled, SES will use your subdomain in the Return-Path automatically, keeping provider hostnames out of sight.
+•	Don’t add X-Mailer or other internal headers.
+________________________________________
+Send example — Postmark (simple, respects header hygiene)
+curl -X POST "https://api.postmarkapp.com/email" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "X-Postmark-Server-Token: $POSTMARK_TOKEN" \
+  -d '{
+    "From": "support@broker.com",
+    "To": "recipient@example.com",
+    "Subject": "Your account update",
+    "HtmlBody": "<p>Hello,</p><p>Your withdrawal has been processed.</p><p>Thanks,<br/>AltimaCRM Support</p>",
+    "TextBody": "Hello,\n\nYour withdrawal has been processed.\n\nThanks,\nAltimaCRM Support",
+    "MessageStream": "outbound",
+    "Headers": [
+      { "Name": "List-Unsubscribe", "Value": "<mailto:unsubscribe@mailer.broker.com>, <https://broker.com/email/unsub?u=__HASH__>" },
+      { "Name": "List-Unsubscribe-Post", "Value": "List-Unsubscribe=One-Click" }
+    ]
+  }' 
+Postmark automatically sets a sane Message-ID, hides internal infrastructure, and supports custom Return-Path once your domain is verified.
+________________________________________
+Bounce/complaint webhook (minimal handler contract)
+Whichever provider you pick, wire their webhook to your proxy:
+•	Expect events for Bounce, Complaint, Delivery, Open, Click, SubscriptionChange.
+•	Store: event_type, recipient, timestamp, MessageID, reason.
+•	Update suppression list; show status in the CRM thread.
+Example payload fields to store
+{
+  "event": "Bounce",
+  "recipient": "user@example.com",
+  "message_id": "provider_msg_id_or_yours",
+  "reason": "MailboxFull",
+  "ts": 1733900994
+}
+________________________________________
+Quick DMARC/SPF/DKIM snippets (for mailer.broker.com)
+•	SPF (TXT at mailer.broker.com):
+•	v=spf1 include:amazonses.com -all
+•	DKIM (TXT at selector._domainkey.mailer.broker.com): value provided by provider
+•	DMARC (TXT at _dmarc.broker.com):
+•	v=DMARC1; p=none; sp=none; adkim=r; aspf=r; pct=100; rua=mailto:dmarc@broker.com
+(start with p=none, move to quarantine/reject after monitoring)
+________________________________________
+
