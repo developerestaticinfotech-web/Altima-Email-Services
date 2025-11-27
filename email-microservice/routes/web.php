@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use App\Http\Controllers\AuthController;
 
 // Authentication routes
@@ -47,6 +48,28 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/email-tracking', function () {
         return view('email-tracking');
     })->name('email.tracking');
+
+    // Email templates management page
+    Route::get('/templates', function () {
+        return view('templates');
+    })->name('templates');
+    
+    // Also serve templates page at /api/email/templates when accessed via browser (not API)
+    Route::get('/api/email/templates', function (Request $request) {
+        // Check if request wants JSON (API call) - check Accept header explicitly
+        $acceptHeader = $request->header('Accept', '');
+        $isApiRequest = str_contains($acceptHeader, 'application/json') || 
+                       $request->wantsJson() || 
+                       $request->expectsJson() ||
+                       $request->ajax();
+        
+        if ($isApiRequest) {
+            // Delegate to API controller for JSON response
+            return app(\App\Http\Controllers\Api\EmailController::class)->getTemplates($request);
+        }
+        // Otherwise, serve the HTML page (browser navigation)
+        return view('templates');
+    });
 
     // File download route for email attachments
     Route::get('/email/file/{path}', function (string $path) {

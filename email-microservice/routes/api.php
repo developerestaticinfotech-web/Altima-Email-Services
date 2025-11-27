@@ -43,6 +43,7 @@ Route::prefix('email')->group(function () {
     // Get email templates
     Route::get('/templates', [EmailController::class, 'getTemplates']);
     Route::get('/templates/{templateId}', [EmailController::class, 'getTemplate']);
+    Route::post('/templates', [EmailController::class, 'createTemplate']);
     
     // Get email logs
     Route::get('/logs', [EmailController::class, 'getEmailLogs']);

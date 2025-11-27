@@ -221,6 +221,54 @@ class EmailService
         $htmlContent = null;
         $textContent = null;
 
+        // Extract variables from template content to see what's expected
+        $templateVariables = [];
+        if ($template->html_content) {
+            preg_match_all('/\{\{\s*\$?([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/', $template->html_content, $matches);
+            if (!empty($matches[1])) {
+                $templateVariables = array_unique($matches[1]);
+            }
+        }
+        if ($template->text_content) {
+            preg_match_all('/\{\{\s*\$?([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/', $template->text_content, $matches);
+            if (!empty($matches[1])) {
+                $templateVariables = array_unique(array_merge($templateVariables, $matches[1]));
+            }
+        }
+
+        // Auto-map common variable name mismatches
+        $normalizedData = $data;
+        $missingVars = array_diff($templateVariables, array_keys($data));
+        
+        // Map 'name' to 'first_name' if template expects 'first_name'
+        if (in_array('first_name', $missingVars) && isset($data['name'])) {
+            $normalizedData['first_name'] = $data['name'];
+            Log::info('Auto-mapped variable: name -> first_name', [
+                'original' => $data['name'],
+                'mapped_to' => 'first_name'
+            ]);
+        }
+        
+        // Map 'company' to 'company_name' if template expects 'company_name'
+        if (in_array('company_name', $missingVars) && isset($data['company'])) {
+            $normalizedData['company_name'] = $data['company'];
+            Log::info('Auto-mapped variable: company -> company_name');
+        }
+
+        Log::info('Template variable analysis', [
+            'template_id' => $template->template_id,
+            'template_name' => $template->name,
+            'expected_variables' => $templateVariables,
+            'provided_data_keys' => array_keys($data),
+            'normalized_data_keys' => array_keys($normalizedData),
+            'missing_variables' => array_diff($templateVariables, array_keys($normalizedData)),
+            'extra_variables' => array_diff(array_keys($normalizedData), $templateVariables),
+            'auto_mapped' => array_diff(array_keys($normalizedData), array_keys($data))
+        ]);
+        
+        // Use normalized data for rendering
+        $data = $normalizedData;
+
         if ($template->hasHtmlContent()) {
             $htmlContent = $this->renderBladeContent($template->html_content, $data);
         }
@@ -237,16 +285,50 @@ class EmailService
 
     /**
      * Render Blade content with data.
+     * Made public to allow RabbitMQService to use it for rendering template subjects.
      */
-    protected function renderBladeContent(string $content, array $data): string
+    public function renderBladeContent(string $content, array $data): string
     {
         try {
-            return \Blade::render($content, $data);
+            // Step 1: Remove @ escape characters if present (Blade uses @ to escape, but we want to process)
+            // Convert @{{variable}} to {{variable}}
+            $content = preg_replace('/@\{\{/', '{{', $content);
+            
+            // Step 2: Normalize template variables - Blade expects {{ $variable }} but templates might use {{variable}}
+            // Convert {{variable}} to {{ $variable }} for Blade compatibility
+            $normalizedContent = preg_replace('/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/', '{{ $\\1 }}', $content);
+            
+            // Step 3: Ensure data keys are accessible (Blade needs them as variables)
+            $bladeData = [];
+            foreach ($data as $key => $value) {
+                $bladeData[$key] = $value;
+            }
+            
+            Log::info('Rendering Blade content', [
+                'original_length' => strlen($content),
+                'normalized_length' => strlen($normalizedContent),
+                'data_keys' => array_keys($bladeData),
+                'data_values' => $bladeData, // Log actual values for debugging
+                'has_variables' => preg_match('/\{\{.*\}\}/', $content) > 0,
+                'original_preview' => substr($content, 0, 300),
+                'normalized_preview' => substr($normalizedContent, 0, 300)
+            ]);
+            
+            $rendered = \Blade::render($normalizedContent, $bladeData);
+            
+            Log::info('Blade content rendered successfully', [
+                'rendered_length' => strlen($rendered),
+                'rendered_preview' => substr($rendered, 0, 300)
+            ]);
+            
+            return $rendered;
         } catch (\Exception $e) {
             Log::error('Template rendering failed', [
                 'error' => $e->getMessage(),
-                'content' => $content,
+                'content_preview' => substr($content, 0, 500),
+                'data_keys' => array_keys($data),
                 'data' => $data,
+                'trace' => $e->getTraceAsString()
             ]);
             throw new \Exception("Template rendering failed: {$e->getMessage()}");
         }

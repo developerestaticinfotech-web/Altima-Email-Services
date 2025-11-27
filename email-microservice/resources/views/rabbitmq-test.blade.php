@@ -427,6 +427,110 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: rgba(26, 26, 46, 0.98);
+            border: 2px solid rgba(138, 43, 226, 0.5);
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(138, 43, 226, 0.5);
+            color: #e0e0e0;
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(138, 43, 226, 0.3);
+        }
+
+        .modal-header h2 {
+            color: #8a2be2;
+            margin: 0;
+            font-size: 1.8rem;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            color: #e0e0e0;
+            font-size: 2rem;
+            cursor: pointer;
+            padding: 0;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .close-modal:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+
+        .template-preview {
+            background: rgba(15, 15, 35, 0.6);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 15px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .template-preview-html {
+            background: white;
+            color: #333;
+            padding: 20px;
+            border-radius: 5px;
+            min-height: 200px;
+        }
+
+        .template-preview-text {
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
+        .template-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -545,11 +649,17 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label for="template_id">Template *</label>
-                        <select id="template_id" name="template_id" required>
-                            <option value="">Loading templates...</option>
-                        </select>
+                        <div style="display: flex; gap: 10px; align-items: flex-start;">
+                            <select id="template_id" name="template_id" required style="flex: 1;">
+                                <option value="">Loading templates...</option>
+                            </select>
+                            <button type="button" class="btn btn-info btn-sm" onclick="previewSelectedTemplate()" title="Preview Template" style="padding: 10px 15px;">👁️ Preview</button>
+                            <button type="button" class="btn btn-success btn-sm" onclick="openCreateTemplateModal()" title="Add New Template" style="padding: 10px 15px;">➕ Add</button>
+                        </div>
                         <small id="templateInfo" style="display: none; color: #00d4ff; margin-top: 5px;"></small>
-                        <button type="button" class="btn btn-info btn-sm" onclick="loadTemplates()" style="margin-top: 5px; padding: 5px 10px; font-size: 0.85rem;">🔄 Refresh Templates</button>
+                        <div class="template-actions">
+                            <button type="button" class="btn btn-info btn-sm" onclick="loadTemplates()" style="padding: 5px 10px; font-size: 0.85rem;">🔄 Refresh Templates</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="subject">Subject (Optional)</label>
@@ -558,7 +668,7 @@
                     </div>
                 </div>
                 
-                <div class="form-group">
+                <!-- <div class="form-group">
                     <label for="template_data">Template Data (JSON) *</label>
                     <textarea id="template_data" name="template_data" rows="6" required placeholder='{"name": "John Doe", "company": "Example Corp"}'>{
   "name": "Test User",
@@ -566,7 +676,7 @@
   "message": "This is a test email sent via RabbitMQ with template support."
 }</textarea>
                     <small>JSON object with template variables. Example: {"name": "John", "email": "john@example.com"}</small>
-                </div>
+                </div> -->
                 
                 <!-- Attachments Section -->
                 <div class="form-group">
@@ -611,6 +721,69 @@
         </div>
     </div>
 
+    <!-- Template Preview Modal -->
+    <div id="previewModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>👁️ Template Preview</h2>
+                <button class="close-modal" onclick="closePreviewModal()">&times;</button>
+            </div>
+            <div id="previewContent">
+                <p>Loading preview...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Template Modal -->
+    <div id="createTemplateModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2>➕ Create New Template</h2>
+                <button class="close-modal" onclick="closeCreateTemplateModal()">&times;</button>
+            </div>
+            <form id="createTemplateForm">
+                <div class="form-group">
+                    <label for="new_template_id">Template ID *</label>
+                    <input type="text" id="new_template_id" name="template_id" required placeholder="e.g., welcome-email" pattern="[a-z0-9-]+" title="Lowercase letters, numbers, and hyphens only">
+                    <small>Unique identifier (lowercase, numbers, hyphens only)</small>
+                </div>
+                <div class="form-group">
+                    <label for="new_template_name">Template Name *</label>
+                    <input type="text" id="new_template_name" name="name" required placeholder="e.g., Welcome Email Template">
+                </div>
+                <div class="form-group">
+                    <label for="new_template_subject">Subject *</label>
+                    <input type="text" id="new_template_subject" name="subject" required placeholder="e.g., Welcome @{{name}}!">
+                    <small>You can use variables like @{{name}}, @{{company}}, etc.</small>
+                </div>
+                <div class="form-group">
+                    <label for="new_template_html">HTML Content *</label>
+                    <textarea id="new_template_html" name="html_content" rows="10" required placeholder='<html><body><h1>Hello @{{name}}!</h1><p>@{{message}}</p></body></html>'></textarea>
+                    <small>Use Blade syntax: @{{variable}} for variables</small>
+                </div>
+                <div class="form-group">
+                    <label for="new_template_text">Text Content (Optional)</label>
+                    <textarea id="new_template_text" name="text_content" rows="6" placeholder="Plain text version of the email"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="new_template_category">Category</label>
+                        <input type="text" id="new_template_category" name="category" placeholder="e.g., system, marketing, transactional">
+                    </div>
+                    <div class="form-group">
+                        <label for="new_template_language">Language</label>
+                        <input type="text" id="new_template_language" name="language" value="en" placeholder="e.g., en, es, fr">
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary">💾 Create Template</button>
+                    <button type="button" class="btn btn-warning" onclick="closeCreateTemplateModal()">Cancel</button>
+                </div>
+            </form>
+            <div id="createTemplateStatus" style="display: none; margin-top: 15px; padding: 10px; border-radius: 5px;"></div>
+        </div>
+    </div>
+
     <script>
         // Load initial data
         document.addEventListener('DOMContentLoaded', function() {
@@ -647,6 +820,9 @@
             }
         });
         
+        // Get base URL dynamically
+        const baseUrl = window.location.origin;
+        
         // Load email templates
         async function loadTemplates() {
             const templateSelect = document.getElementById('template_id');
@@ -655,7 +831,12 @@
             try {
                 templateSelect.innerHTML = '<option value="">Loading templates...</option>';
                 
-                const response = await fetch('http://localhost:8000/api/email/templates?active=true&per_page=100');
+                const response = await fetch(`${baseUrl}/api/email/templates?active=true&per_page=100`, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
                 const result = await response.json();
                 
                 if (result.success && result.data && result.data.length > 0) {
@@ -667,12 +848,18 @@
                         option.textContent = `${template.name} (${template.template_id})`;
                         option.dataset.subject = template.subject || '';
                         option.dataset.variables = JSON.stringify(template.variables || {});
+                        // Store full template data for preview
+                        option.dataset.templateData = JSON.stringify(template);
                         templateSelect.appendChild(option);
                     });
                     
                     // Show template info when selected
                     templateSelect.addEventListener('change', function() {
                         const selectedOption = this.options[this.selectedIndex];
+                        const templateDataField = document.getElementById('template_data');
+                        const templateDataLabel = templateDataField?.previousElementSibling;
+                        const templateDataContainer = templateDataField?.parentElement;
+                        
                         if (selectedOption.value) {
                             const subject = selectedOption.dataset.subject;
                             const variables = JSON.parse(selectedOption.dataset.variables || '{}');
@@ -690,16 +877,37 @@
                                 document.getElementById('subject').value = subject;
                             }
                             
-                            // Update template_data with example based on variables
-                            if (varKeys.length > 0 && !document.getElementById('template_data').value.trim()) {
-                                const exampleData = {};
-                                varKeys.forEach(key => {
-                                    exampleData[key] = `Your ${key} value here`;
-                                });
-                                document.getElementById('template_data').value = JSON.stringify(exampleData, null, 2);
+                            // Show/hide template_data field based on whether template has variables
+                            if (varKeys.length > 0) {
+                                // Template has variables - show the field
+                                if (templateDataContainer) {
+                                    templateDataContainer.style.display = 'block';
+                                }
+                                templateDataField.required = true;
+                                
+                                // Update template_data with example based on variables
+                                if (!templateDataField.value.trim()) {
+                                    const exampleData = {};
+                                    varKeys.forEach(key => {
+                                        exampleData[key] = `Your ${key} value here`;
+                                    });
+                                    templateDataField.value = JSON.stringify(exampleData, null, 2);
+                                }
+                            } else {
+                                // Template has no variables - hide the field
+                                if (templateDataContainer) {
+                                    templateDataContainer.style.display = 'none';
+                                }
+                                templateDataField.required = false;
+                                templateDataField.value = '{}'; // Set empty JSON
                             }
                         } else {
                             templateInfo.style.display = 'none';
+                            // Show field by default when no template selected
+                            if (templateDataContainer) {
+                                templateDataContainer.style.display = 'block';
+                            }
+                            templateDataField.required = true;
                         }
                     });
                 } else {
@@ -720,7 +928,7 @@
         // Load tenants
         async function loadTenants() {
             try {
-                const response = await fetch('http://localhost:8000/api/email/tenants');
+                const response = await fetch(`${baseUrl}/api/email/tenants`);
                 if (response.ok) {
                     const result = await response.json();
                     const tenants = result.data || [];
@@ -737,7 +945,7 @@
         // Load providers
         async function loadProviders() {
             try {
-                const response = await fetch('http://localhost:8000/api/email/providers');
+                const response = await fetch(`${baseUrl}/api/email/providers`);
                 if (response.ok) {
                     const result = await response.json();
                     const providers = result.data || [];
@@ -754,7 +962,7 @@
         // Refresh queue status
         async function refreshQueueStatus() {
             try {
-                const response = await fetch('http://localhost:8000/api/rabbitmq/queue-status');
+                const response = await fetch(`${baseUrl}/api/rabbitmq/queue-status`);
                 if (response.ok) {
                     const result = await response.json();
                     const status = result.data;
@@ -813,7 +1021,7 @@
             try {
                 console.log('Starting queue processing...');
                 
-                const response = await fetch('http://localhost:8000/api/rabbitmq/process-queue', {
+                const response = await fetch(`${baseUrl}/api/rabbitmq/process-queue`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -864,7 +1072,14 @@
                     }
                     
                     alert(message);
+                    // Refresh queue status immediately after processing (multiple times to ensure update)
                     refreshQueueStatus();
+                    setTimeout(() => {
+                        refreshQueueStatus();
+                    }, 1000);
+                    setTimeout(() => {
+                        refreshQueueStatus();
+                    }, 2000);
                 } else {
                     alert('❌ Failed to process queue:\n\n' + (result.message || 'Unknown error') + 
                           (result.error ? '\n\nError: ' + result.error : ''));
@@ -1019,6 +1234,14 @@
                 return;
             }
             
+            // Ensure attachments is always an array (even if empty)
+            const attachmentsArray = Array.isArray(attachments) ? attachments : [];
+            
+            console.log('Sending email with attachments:', {
+                count: attachmentsArray.length,
+                attachments: attachmentsArray
+            });
+            
             const emailData = {
                 tenant_id: formData.get('tenant_id'),
                 provider_id: formData.get('provider_id'),
@@ -1027,11 +1250,11 @@
                 subject: formData.get('subject') || null, // Optional
                 template_id: formData.get('template_id'),
                 template_data: templateData,
-                attachments: attachments.length > 0 ? attachments : undefined
+                attachments: attachmentsArray.length > 0 ? attachmentsArray : [] // Always send as array, even if empty
             };
             
             try {
-                const response = await fetch('http://localhost:8000/api/rabbitmq/send-email', {
+                const response = await fetch(`${baseUrl}/api/rabbitmq/send-email`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1106,6 +1329,199 @@ Details: ${result.error || 'No additional details'}`;
                 if (sidebar.classList.contains('active')) {
                     toggleSidebar();
                 }
+                closePreviewModal();
+                closeCreateTemplateModal();
+            }
+        });
+
+        // Template Preview Functions
+        function previewSelectedTemplate() {
+            const templateSelect = document.getElementById('template_id');
+            const selectedOption = templateSelect.options[templateSelect.selectedIndex];
+            
+            if (!selectedOption || !selectedOption.value) {
+                alert('Please select a template first');
+                return;
+            }
+
+            const templateData = JSON.parse(selectedOption.dataset.templateData || '{}');
+            const templateDataInput = document.getElementById('template_data').value;
+            
+            let sampleData = {};
+            try {
+                if (templateDataInput.trim()) {
+                    sampleData = JSON.parse(templateDataInput);
+                }
+            } catch (e) {
+                // Use default sample data if JSON is invalid
+            }
+
+            // If no data provided, use template variables to create sample
+            if (Object.keys(sampleData).length === 0 && templateData.variables) {
+                Object.keys(templateData.variables).forEach(key => {
+                    sampleData[key] = `Sample ${key}`;
+                });
+            }
+
+            showTemplatePreview(templateData, sampleData);
+        }
+
+        function showTemplatePreview(template, sampleData) {
+            const modal = document.getElementById('previewModal');
+            const content = document.getElementById('previewContent');
+            
+            let htmlPreview = '';
+            let textPreview = '';
+
+            // Render HTML content if available
+            if (template.html_content) {
+                htmlPreview = renderTemplate(template.html_content, sampleData);
+            }
+
+            // Render text content if available
+            if (template.text_content) {
+                textPreview = renderTemplate(template.text_content, sampleData);
+            }
+
+            content.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #8a2be2; margin-bottom: 10px;">${template.name || 'Template'}</h3>
+                    <p><strong>Template ID:</strong> <code>${template.template_id}</code></p>
+                    <p><strong>Subject:</strong> ${renderTemplate(template.subject || '', sampleData)}</p>
+                    ${template.variables ? `<p><strong>Variables:</strong> ${Object.keys(template.variables).join(', ')}</p>` : ''}
+                </div>
+                ${htmlPreview ? `
+                <div style="margin-bottom: 20px;">
+                    <h4 style="color: #00d4ff; margin-bottom: 10px;">📧 HTML Preview</h4>
+                    <div class="template-preview">
+                        <div class="template-preview-html">${htmlPreview}</div>
+                    </div>
+                </div>
+                ` : ''}
+                ${textPreview ? `
+                <div>
+                    <h4 style="color: #00d4ff; margin-bottom: 10px;">📝 Text Preview</h4>
+                    <div class="template-preview">
+                        <div class="template-preview-text">${escapeHtml(textPreview)}</div>
+                    </div>
+                </div>
+                ` : ''}
+                ${!htmlPreview && !textPreview ? '<p style="color: #ffc107;">⚠️ No content available for preview</p>' : ''}
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function renderTemplate(content, data) {
+            if (!content) return '';
+            
+            let rendered = content;
+            // Simple variable replacement (Blade-like syntax)
+            Object.keys(data).forEach(key => {
+                const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, 'g');
+                rendered = rendered.replace(regex, data[key]);
+            });
+            
+            return rendered;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function closePreviewModal() {
+            document.getElementById('previewModal').classList.remove('active');
+        }
+
+        // Create Template Functions
+        function openCreateTemplateModal() {
+            document.getElementById('createTemplateModal').classList.add('active');
+            document.getElementById('createTemplateForm').reset();
+            document.getElementById('createTemplateStatus').style.display = 'none';
+        }
+
+        function closeCreateTemplateModal() {
+            document.getElementById('createTemplateModal').classList.remove('active');
+        }
+
+        // Handle create template form submission
+        document.getElementById('createTemplateForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const statusDiv = document.getElementById('createTemplateStatus');
+            
+            const templateData = {
+                template_id: formData.get('template_id'),
+                name: formData.get('name'),
+                subject: formData.get('subject'),
+                html_content: formData.get('html_content'),
+                text_content: formData.get('text_content') || null,
+                category: formData.get('category') || 'system',
+                language: formData.get('language') || 'en',
+                is_active: true
+            };
+
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = '<p style="color: #00d4ff;">⏳ Creating template...</p>';
+
+            try {
+                const response = await fetch(`${baseUrl}/api/email/templates`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(templateData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    statusDiv.innerHTML = `
+                        <div style="background: rgba(40, 167, 69, 0.2); border: 1px solid #28a745; padding: 15px; border-radius: 5px; color: #28a745;">
+                            ✅ Template created successfully!<br>
+                            <strong>Template ID:</strong> ${result.data.template_id || templateData.template_id}<br>
+                            <button class="btn btn-primary btn-sm" onclick="closeCreateTemplateModal(); loadTemplates();" style="margin-top: 10px;">Refresh Templates</button>
+                        </div>
+                    `;
+                    
+                    // Auto-refresh templates after 2 seconds
+                    setTimeout(() => {
+                        closeCreateTemplateModal();
+                        loadTemplates();
+                    }, 2000);
+                } else {
+                    statusDiv.innerHTML = `
+                        <div style="background: rgba(220, 53, 69, 0.2); border: 1px solid #dc3545; padding: 15px; border-radius: 5px; color: #dc3545;">
+                            ❌ Failed to create template<br>
+                            <strong>Error:</strong> ${result.message || result.error || 'Unknown error'}<br>
+                            ${result.errors ? `<pre style="margin-top: 10px; font-size: 0.85rem;">${JSON.stringify(result.errors, null, 2)}</pre>` : ''}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div style="background: rgba(220, 53, 69, 0.2); border: 1px solid #dc3545; padding: 15px; border-radius: 5px; color: #dc3545;">
+                        ❌ Error: ${error.message}<br>
+                        <small>Note: Make sure the API endpoint POST /api/email/templates exists</small>
+                    </div>
+                `;
+            }
+        });
+
+        // Close modals when clicking outside
+        document.getElementById('previewModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closePreviewModal();
+            }
+        });
+
+        document.getElementById('createTemplateModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCreateTemplateModal();
             }
         });
     </script>

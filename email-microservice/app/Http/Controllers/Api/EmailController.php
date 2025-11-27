@@ -817,6 +817,95 @@ Pg0Kc3RhcnR4cmVmDQo0OTINCiUlRU9GDQo=
     }
 
     /**
+     * Create a new email template.
+     */
+    public function createTemplate(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'template_id' => 'required|string|max:255|unique:email_templates,template_id',
+                'name' => 'required|string|max:255',
+                'subject' => 'required|string|max:500',
+                'html_content' => 'nullable|string',
+                'text_content' => 'nullable|string',
+                'category' => 'nullable|string|max:100',
+                'language' => 'nullable|string|max:10',
+                'is_active' => 'nullable|boolean',
+                'variables' => 'nullable|array',
+                'metadata' => 'nullable|array',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            // Extract variables from template content if not provided
+            $variables = $request->input('variables', []);
+            if (empty($variables)) {
+                $variables = $this->extractVariablesFromTemplate(
+                    $request->input('html_content', '') . ' ' . $request->input('text_content', '') . ' ' . $request->input('subject', '')
+                );
+            }
+
+            $template = EmailTemplate::create([
+                'template_id' => $request->input('template_id'),
+                'name' => $request->input('name'),
+                'subject' => $request->input('subject'),
+                'html_content' => $request->input('html_content'),
+                'text_content' => $request->input('text_content'),
+                'category' => $request->input('category', 'system'),
+                'language' => $request->input('language', 'en'),
+                'is_active' => $request->input('is_active', true),
+                'variables' => $variables,
+                'metadata' => $request->input('metadata', [
+                    'description' => 'Template created via API',
+                    'version' => '1.0',
+                    'created_by' => 'api',
+                ]),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Template created successfully',
+                'data' => $template,
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('Error creating template: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create template',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Extract variables from template content (Blade syntax: {{variable}}).
+     */
+    private function extractVariablesFromTemplate(string $content): array
+    {
+        $variables = [];
+        $pattern = '/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/';
+        
+        if (preg_match_all($pattern, $content, $matches)) {
+            $uniqueVars = array_unique($matches[1]);
+            foreach ($uniqueVars as $var) {
+                $variables[$var] = ucfirst(str_replace('_', ' ', $var));
+            }
+        }
+
+        return $variables;
+    }
+
+    /**
      * Get email logs from outbox table.
      */
     public function getEmailLogs(Request $request): JsonResponse
@@ -1281,6 +1370,38 @@ Pg0Kc3RhcnR4cmVmDQo0OTINCiUlRU9GDQo=
                 // Get template to determine body format and subject if not provided
                 $template = EmailTemplate::where('template_id', $payload['template_id'])->first();
                 
+                // Normalize template_data variable names if needed
+                // Map common variable names (e.g., 'name' -> 'first_name' if template expects it)
+                $templateData = $payload['template_data'] ?? [];
+                if ($template) {
+                    $templateVariables = $template->variables ?? [];
+                    if (is_string($templateVariables)) {
+                        $templateVariables = json_decode($templateVariables, true) ?? [];
+                    }
+                    
+                    // Check if template expects 'first_name' but we have 'name'
+                    if (isset($templateVariables['first_name']) && !isset($templateData['first_name']) && isset($templateData['name'])) {
+                        $templateData['first_name'] = $templateData['name'];
+                        Log::info('Mapped template variable: name -> first_name', [
+                            'template_id' => $template->template_id,
+                            'original_data' => $payload['template_data'],
+                            'normalized_data' => $templateData
+                        ]);
+                    }
+                }
+                
+                // Ensure attachments is an array
+                $attachments = $payload['attachments'] ?? [];
+                if (!is_array($attachments)) {
+                    $attachments = [];
+                }
+                
+                Log::info('Creating outbox record with attachments', [
+                    'attachments_count' => count($attachments),
+                    'attachments' => $attachments,
+                    'template_data_keys' => array_keys($templateData)
+                ]);
+                
                 // Create outbox record immediately (body will be built from template during processing)
                 $outbox = Outbox::create([
                     'tenant_id' => $payload['tenant_id'],
@@ -1295,17 +1416,23 @@ Pg0Kc3RhcnR4cmVmDQo0OTINCiUlRU9GDQo=
                     'body_format' => $template && $template->hasHtmlContent() ? 'HTML' : 'TEXT',
                     'body_content' => null, // Will be built from template during processing
                     'template_id' => $payload['template_id'],
-                    'attachments' => $payload['attachments'] ?? [],
+                    'attachments' => $attachments, // Ensure it's an array
                     'status' => 'pending',
                     'queued_at' => now(),
                     'source' => 'rabbitmq',
                     'queue_name' => 'email.send',
                     'metadata' => [
-                        'template_data' => $payload['template_data'],
+                        'template_data' => $templateData, // Use normalized template data
                         'queued_at' => now()->toISOString(),
                         'queue_name' => 'email.send',
                         'external_service' => true,
                     ],
+                ]);
+                
+                Log::info('Outbox record created', [
+                    'outbox_id' => $outbox->id,
+                    'saved_attachments_count' => count($outbox->attachments ?? []),
+                    'saved_attachments' => $outbox->attachments
                 ]);
 
                 return response()->json([
